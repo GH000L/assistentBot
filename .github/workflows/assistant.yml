@@ -30,26 +30,23 @@ jobs:
         run: |
           echo '{
             "понедельник": [
-              {"time": "9:00", "subject": "Программирование", "room": "101"},
-              {"time": "10:40", "subject": "Математика", "room": "201"}
+              {"time": "9:00", "subject": "Python", "room": "101"},
+              {"time": "11:00", "subject": "Алгоритмы", "room": "102"}
             ],
             "вторник": [
-              {"time": "9:00", "subject": "Web-разработка", "room": "Комп. класс"},
-              {"time": "12:30", "subject": "Базы данных", "room": "202"}
+              {"time": "10:00", "subject": "Базы данных", "room": "201"}
             ],
             "среда": [
-              {"time": "10:40", "subject": "Алгоритмы", "room": "301"},
-              {"time": "12:30", "subject": "Сети", "room": "Лаборатория"}
+              {"time": "9:00", "subject": "Web разработка", "room": "301"},
+              {"time": "13:00", "subject": "JavaScript", "room": "302"}
             ],
             "четверг": [
-              {"time": "9:00", "subject": "Искусственный интеллект", "room": "Комп. класс"}
+              {"time": "14:00", "subject": "React", "room": "401"}
             ],
             "пятница": [
-              {"time": "10:40", "subject": "Кибербезопасность", "room": "201"},
-              {"time": "12:30", "subject": "Программирование", "room": "301"}
+              {"time": "10:00", "subject": "Проект", "room": "Комп. класс"}
             ]
           }' > schedule.json
-          
           echo "Расписание создано"
 
       - name: Определить день недели
@@ -59,11 +56,9 @@ jobs:
           DAY_NUM=$(date +%u)
           DAY_INDEX=$((DAY_NUM - 1))
           DAY_RU=${DAYS[$DAY_INDEX]}
-          
           CURRENT_DATE=$(date +"%d.%m.%Y")
           CURRENT_TIME=$(date +"%H:%M")
           WEEK_NUM=$(date +%U)
-          
           echo "day=$DAY_RU" >> $GITHUB_OUTPUT
           echo "date=$CURRENT_DATE" >> $GITHUB_OUTPUT
           echo "time=$CURRENT_TIME" >> $GITHUB_OUTPUT
@@ -73,13 +68,11 @@ jobs:
         id: check_schedule
         run: |
           DAY="${{ steps.get_date.outputs.day }}"
-          
           if [ -f "schedule.json" ]; then
             if jq -e ".$DAY" schedule.json > /dev/null 2>&1; then
-              SCHEDULE=$(jq -r ".$DAY[] | \"⏰ \\(.time) - \\(.subject) (ауд. \\(.room))\"" schedule.json 2>/dev/null || echo "")
-              CLASS_COUNT=$(jq -r ".$DAY | length" schedule.json 2>/dev/null || echo "0")
-              
-              if [ -n "$SCHEDULE" ]; then
+              CLASS_COUNT=$(jq -r ".$DAY | length" schedule.json)
+              if [ "$CLASS_COUNT" -gt "0" ]; then
+                SCHEDULE=$(jq -r ".$DAY[] | \"Время: \\(.time) - \\(.subject) (Ауд. \\(.room))\"" schedule.json)
                 echo "has_schedule=true" >> $GITHUB_OUTPUT
                 echo "class_count=$CLASS_COUNT" >> $GITHUB_OUTPUT
                 echo "schedule<<EOF" >> $GITHUB_OUTPUT
@@ -103,24 +96,20 @@ jobs:
         run: |
           if [ ! -f "tasks.json" ]; then
             echo '{
-              "ежедневные": ["Сделать зарядку", "Проверить почту"],
-              "учебные": ["Сделать домашнее задание", "Подготовиться к семинару"],
-              "личные": ["Погулять", "Почитать книгу"]
+              "ежедневные": ["Проверить почту", "Сделать план"],
+              "учебные": ["Сделать ДЗ", "Подготовиться"],
+              "личные": ["Отдохнуть", "Погулять"]
             }' > tasks.json
           fi
-          
           CATEGORIES=("ежедневные" "учебные" "личные")
           RANDOM_CATEGORY=${CATEGORIES[$RANDOM % ${#CATEGORIES[@]}]}
-          
-          TASKS=$(jq -r ".$RANDOM_CATEGORY[]" tasks.json 2>/dev/null || echo "Отдохни сегодня")
-          
+          TASKS=$(jq -r ".$RANDOM_CATEGORY[]" tasks.json)
           FORMATTED=""
           while IFS= read -r task; do
             if [ -n "$task" ]; then
               FORMATTED+="• $task\n"
             fi
           done <<< "$TASKS"
-          
           echo "tasks<<EOF" >> $GITHUB_OUTPUT
           echo -e "$FORMATTED" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -132,18 +121,16 @@ jobs:
           HOURS=$((15 + RANDOM % 25))
           TASKS_DONE=$((10 + RANDOM % 20))
           PROGRESS=$((60 + RANDOM % 40))
-          
           if [ $HOURS -ge 30 ]; then
-            ACHIEVEMENT="🔥 Супер-студент! $HOURS часов учёбы!"
+            ACHIEVEMENT="Отлично! $HOURS часов"
             EMOJI="🏆"
           elif [ $HOURS -ge 20 ]; then
-            ACHIEVEMENT="⭐ Отличная неделя! $HOURS часов учёбы"
+            ACHIEVEMENT="Хорошо! $HOURS часов"
             EMOJI="⭐"
           else
-            ACHIEVEMENT="👍 Хорошая работа! $HOURS часов учёбы"
+            ACHIEVEMENT="Нормально! $HOURS часов"
             EMOJI="👍"
           fi
-          
           echo "hours=$HOURS" >> $GITHUB_OUTPUT
           echo "tasks_done=$TASKS_DONE" >> $GITHUB_OUTPUT
           echo "progress=$PROGRESS" >> $GITHUB_OUTPUT
@@ -157,10 +144,8 @@ jobs:
             echo "message_type=generated" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
             CRON="${{ github.event.schedule }}"
-            
             if [[ "$CRON" == "30 7 * * 1-5" ]]; then
               if [[ "${{ steps.check_schedule.outputs.has_schedule }}" == "true" ]]; then
                 MSG="schedule"
@@ -175,7 +160,6 @@ jobs:
           else
             MSG="${{ github.event.inputs.action }}"
           fi
-          
           echo "message_type=$MSG" >> $GITHUB_OUTPUT
 
       - name: Отправить в Telegram
@@ -186,18 +170,18 @@ jobs:
           message: |
             ${{ steps.determine_message.outputs.message_type == 'generated' && 'Новое расписание!' || '' }}
             ${{ steps.determine_message.outputs.message_type == 'schedule' && 'Расписание на сегодня' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && 'Сегодня пар нет!' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'tasks' && 'Список дел на сегодня' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && 'Сегодня пар нет' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'tasks' && 'Задачи на сегодня' || '' }}
             ${{ steps.determine_message.outputs.message_type == 'progress' && 'Отчет за неделю' || '' }}
             
             День: ${{ steps.get_date.outputs.day }}
             Дата: ${{ steps.get_date.outputs.date }}
             
-            ${{ steps.determine_message.outputs.message_type == 'schedule' && format('Пар сегодня: {0}', steps.check_schedule.outputs.class_count) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'schedule' && format('\nПар сегодня: {0}', steps.check_schedule.outputs.class_count) || '' }}
             ${{ steps.determine_message.outputs.message_type == 'schedule' && '\n' || '' }}
             ${{ steps.determine_message.outputs.message_type == 'schedule' && steps.check_schedule.outputs.schedule || '' }}
             
-            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && '\nМожно заняться самообразованием' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && '\nМожно отдохнуть' || '' }}
             
             ${{ steps.determine_message.outputs.message_type == 'tasks' && format('\nКатегория: {0}', steps.get_tasks.outputs.category) || '' }}
             ${{ steps.determine_message.outputs.message_type == 'tasks' && '\nЗадачи:\n' || '' }}
@@ -205,9 +189,9 @@ jobs:
             
             ${{ steps.determine_message.outputs.message_type == 'progress' && format('\n{0} {1}', steps.generate_progress.outputs.emoji, steps.generate_progress.outputs.achievement) || '' }}
             ${{ steps.determine_message.outputs.message_type == 'progress' && '\nСтатистика:' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nЧасов учёбы: {0}', steps.generate_progress.outputs.hours) || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nВыполнено задач: {0}', steps.generate_progress.outputs.tasks_done) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nЧасов: {0}', steps.generate_progress.outputs.hours) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nЗадач: {0}', steps.generate_progress.outputs.tasks_done) || '' }}
             ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nПрогресс: {0}%', steps.generate_progress.outputs.progress) || '' }}
             
-            ${{ steps.determine_message.outputs.message_type == 'generated' && '\nНовое расписание сгенерировано!' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'generated' && '\nРасписание создано' || '' }}
           parse_mode: markdown
