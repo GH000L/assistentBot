@@ -1,4 +1,4 @@
-name: 🎓 Учебный ассистент
+name: Учебный ассистент
 
 on:
   workflow_dispatch:
@@ -22,70 +22,37 @@ jobs:
   send-notification:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Загрузка репозитория
+      - name: Загрузка репозитория
         uses: actions/checkout@v4
 
-      - name: 🎲 Генерировать новое расписание
+      - name: Создать расписание
         if: github.event.inputs.action == 'generate_schedule'
         run: |
-          echo "Запускаем генерацию расписания..."
+          echo '{
+            "понедельник": [
+              {"time": "9:00", "subject": "Программирование", "room": "101"},
+              {"time": "10:40", "subject": "Математика", "room": "201"}
+            ],
+            "вторник": [
+              {"time": "9:00", "subject": "Web-разработка", "room": "Комп. класс"},
+              {"time": "12:30", "subject": "Базы данных", "room": "202"}
+            ],
+            "среда": [
+              {"time": "10:40", "subject": "Алгоритмы", "room": "301"},
+              {"time": "12:30", "subject": "Сети", "room": "Лаборатория"}
+            ],
+            "четверг": [
+              {"time": "9:00", "subject": "Искусственный интеллект", "room": "Комп. класс"}
+            ],
+            "пятница": [
+              {"time": "10:40", "subject": "Кибербезопасность", "room": "201"},
+              {"time": "12:30", "subject": "Программирование", "room": "301"}
+            ]
+          }' > schedule.json
           
-          python3 -c "
-import json
-import random
+          echo "Расписание создано"
 
-subjects = [
-    'Программирование',
-    'Математика',
-    'Физика',
-    'Английский',
-    'Web-разработка',
-    'Базы данных',
-    'Сети',
-    'Алгоритмы',
-    'Искусственный интеллект',
-    'Кибербезопасность'
-]
-
-rooms = ['101', '102', '201', '202', '301', '302', 'Комп. класс', 'Лаборатория']
-times = ['9:00', '10:40', '12:30', '14:10', '15:50']
-days = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница']
-
-schedule = {}
-
-for day in days:
-    num_classes = random.randint(2, 5)
-    day_schedule = []
-    used_times = []
-
-    for _ in range(num_classes):
-        while True:
-            time = random.choice(times)
-            if time not in used_times:
-                used_times.append(time)
-                break
-
-        subject = random.choice(subjects)
-        room = random.choice(rooms)
-
-        day_schedule.append({
-            'time': time,
-            'subject': subject,
-            'room': room
-        })
-
-    day_schedule.sort(key=lambda x: x['time'])
-    schedule[day] = day_schedule
-
-with open('schedule.json', 'w', encoding='utf-8') as f:
-    json.dump(schedule, f, ensure_ascii=False, indent=2)
-
-print('Расписание сгенерировано!')
-"
-          
-          cat schedule.json
-
-      - name: 📅 Определить день недели
+      - name: Определить день недели
         id: get_date
         run: |
           DAYS=("понедельник" "вторник" "среда" "четверг" "пятница" "суббота" "воскресенье")
@@ -102,32 +69,50 @@ print('Расписание сгенерировано!')
           echo "time=$CURRENT_TIME" >> $GITHUB_OUTPUT
           echo "week=$WEEK_NUM" >> $GITHUB_OUTPUT
 
-      - name: 📋 Проверить расписание
+      - name: Проверить расписание
         id: check_schedule
         run: |
           DAY="${{ steps.get_date.outputs.day }}"
           
-          if jq -e ".$DAY" schedule.json > /dev/null 2>&1; then
-            SCHEDULE=$(jq -r ".$DAY[] | \"⏰ \\(.time) - \\(.subject) (ауд. \\(.room))\"" schedule.json)
-            CLASS_COUNT=$(jq -r ".$DAY | length" schedule.json)
-            
-            echo "has_schedule=true" >> $GITHUB_OUTPUT
-            echo "class_count=$CLASS_COUNT" >> $GITHUB_OUTPUT
-            echo "schedule<<EOF" >> $GITHUB_OUTPUT
-            echo "$SCHEDULE" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+          if [ -f "schedule.json" ]; then
+            if jq -e ".$DAY" schedule.json > /dev/null 2>&1; then
+              SCHEDULE=$(jq -r ".$DAY[] | \"⏰ \\(.time) - \\(.subject) (ауд. \\(.room))\"" schedule.json 2>/dev/null || echo "")
+              CLASS_COUNT=$(jq -r ".$DAY | length" schedule.json 2>/dev/null || echo "0")
+              
+              if [ -n "$SCHEDULE" ]; then
+                echo "has_schedule=true" >> $GITHUB_OUTPUT
+                echo "class_count=$CLASS_COUNT" >> $GITHUB_OUTPUT
+                echo "schedule<<EOF" >> $GITHUB_OUTPUT
+                echo "$SCHEDULE" >> $GITHUB_OUTPUT
+                echo "EOF" >> $GITHUB_OUTPUT
+              else
+                echo "has_schedule=false" >> $GITHUB_OUTPUT
+                echo "class_count=0" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "has_schedule=false" >> $GITHUB_OUTPUT
+              echo "class_count=0" >> $GITHUB_OUTPUT
+            fi
           else
             echo "has_schedule=false" >> $GITHUB_OUTPUT
             echo "class_count=0" >> $GITHUB_OUTPUT
           fi
 
-      - name: ✅ Получить задачи
+      - name: Получить задачи
         id: get_tasks
         run: |
+          if [ ! -f "tasks.json" ]; then
+            echo '{
+              "ежедневные": ["Сделать зарядку", "Проверить почту"],
+              "учебные": ["Сделать домашнее задание", "Подготовиться к семинару"],
+              "личные": ["Погулять", "Почитать книгу"]
+            }' > tasks.json
+          fi
+          
           CATEGORIES=("ежедневные" "учебные" "личные")
           RANDOM_CATEGORY=${CATEGORIES[$RANDOM % ${#CATEGORIES[@]}]}
           
-          TASKS=$(jq -r ".$RANDOM_CATEGORY[]" tasks.json 2>/dev/null || echo "Отдохни сегодня!")
+          TASKS=$(jq -r ".$RANDOM_CATEGORY[]" tasks.json 2>/dev/null || echo "Отдохни сегодня")
           
           FORMATTED=""
           while IFS= read -r task; do
@@ -141,7 +126,7 @@ print('Расписание сгенерировано!')
           echo "EOF" >> $GITHUB_OUTPUT
           echo "category=$RANDOM_CATEGORY" >> $GITHUB_OUTPUT
 
-      - name: 📊 Сгенерировать прогресс
+      - name: Сгенерировать прогресс
         id: generate_progress
         run: |
           HOURS=$((15 + RANDOM % 25))
@@ -165,7 +150,7 @@ print('Расписание сгенерировано!')
           echo "achievement=$ACHIEVEMENT" >> $GITHUB_OUTPUT
           echo "emoji=$EMOJI" >> $GITHUB_OUTPUT
 
-      - name: 🔍 Определить тип уведомления
+      - name: Определить тип уведомления
         id: determine_message
         run: |
           if [[ "${{ github.event.inputs.action }}" == "generate_schedule" ]]; then
@@ -193,44 +178,36 @@ print('Расписание сгенерировано!')
           
           echo "message_type=$MSG" >> $GITHUB_OUTPUT
 
-      - name: 📨 Отправить уведомление
+      - name: Отправить в Telegram
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            ${{ steps.determine_message.outputs.message_type == 'generated' && '🎲 *НОВОЕ РАСПИСАНИЕ!*' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'schedule' && '📅 *РАСПИСАНИЕ НА СЕГОДНЯ*' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && '🎉 *СЕГОДНЯ ПАР НЕТ!*' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'tasks' && '✅ *СПИСОК ДЕЛ НА СЕГОДНЯ*' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && '📊 *ОТЧЕТ ЗА НЕДЕЛЮ*' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'generated' && 'Новое расписание!' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'schedule' && 'Расписание на сегодня' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && 'Сегодня пар нет!' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'tasks' && 'Список дел на сегодня' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'progress' && 'Отчет за неделю' || '' }}
             
-            📆 День: ${{ steps.get_date.outputs.day }}
-            📅 Дата: ${{ steps.get_date.outputs.date }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && format('📈 Неделя №{0}', steps.get_date.outputs.week) || '' }}
+            День: ${{ steps.get_date.outputs.day }}
+            Дата: ${{ steps.get_date.outputs.date }}
             
-            ${{ steps.determine_message.outputs.message_type == 'schedule' && format('\n📚 *Пар сегодня: {0}*', steps.check_schedule.outputs.class_count) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'schedule' && format('Пар сегодня: {0}', steps.check_schedule.outputs.class_count) || '' }}
             ${{ steps.determine_message.outputs.message_type == 'schedule' && '\n' || '' }}
             ${{ steps.determine_message.outputs.message_type == 'schedule' && steps.check_schedule.outputs.schedule || '' }}
-
-            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && '\n🎯 *Можно заняться:*\n• Самообразованием\n• Проектами\n• Отдыхом\n• Хобби\n' || '' }}
-
-            ${{ steps.determine_message.outputs.message_type == 'tasks' && format('\n📂 Категория: {0}', steps.get_tasks.outputs.category) || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'tasks' && '\n📝 *Задачи:*\n' || '' }}
+            
+            ${{ steps.determine_message.outputs.message_type == 'no_schedule' && '\nМожно заняться самообразованием' || '' }}
+            
+            ${{ steps.determine_message.outputs.message_type == 'tasks' && format('\nКатегория: {0}', steps.get_tasks.outputs.category) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'tasks' && '\nЗадачи:\n' || '' }}
             ${{ steps.determine_message.outputs.message_type == 'tasks' && steps.get_tasks.outputs.tasks || '' }}
-
-            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\n{0} *{1}*', steps.generate_progress.outputs.emoji, steps.generate_progress.outputs.achievement) || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && '\n📈 *Статистика:*' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\n⏰ Часов учёбы: {0}', steps.generate_progress.outputs.hours) || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\n✅ Выполнено задач: {0}', steps.generate_progress.outputs.tasks_done) || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\n📊 Общий прогресс: {0}%', steps.generate_progress.outputs.progress) || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'progress' && '\n\n💪 *Так держать!*' || '' }}
-
-            ${{ steps.determine_message.outputs.message_type == 'generated' && '\n🎯 *Новое рандомное расписание сгенерировано!*' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'generated' && '\n📅 Оно обновляется каждое воскресенье.' || '' }}
-            ${{ steps.determine_message.outputs.message_type == 'generated' && '\n🤖 Теперь у вас всегда свежее расписание!' || '' }}
-
-            ---
-            🎲 *MyStudyAssistantBot с рандомным расписанием*
-            🕐 ${{ steps.get_date.outputs.time }}
+            
+            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\n{0} {1}', steps.generate_progress.outputs.emoji, steps.generate_progress.outputs.achievement) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'progress' && '\nСтатистика:' || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nЧасов учёбы: {0}', steps.generate_progress.outputs.hours) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nВыполнено задач: {0}', steps.generate_progress.outputs.tasks_done) || '' }}
+            ${{ steps.determine_message.outputs.message_type == 'progress' && format('\nПрогресс: {0}%', steps.generate_progress.outputs.progress) || '' }}
+            
+            ${{ steps.determine_message.outputs.message_type == 'generated' && '\nНовое расписание сгенерировано!' || '' }}
           parse_mode: markdown
